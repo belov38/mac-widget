@@ -27,7 +27,7 @@ struct HostWidgetView: View {
             // Bottom cards share the taller one's natural height; charts take the rest.
             HStack(spacing: 8) {
                 temps(h.temps)
-                storages(h.storages)
+                storages(h.storages, io: h.ioPressure)
             }
             .fixedSize(horizontal: false, vertical: true)
         }
@@ -41,7 +41,7 @@ struct HostWidgetView: View {
                 Text("avg \(pct(h.cpu.avg)) · peak \(pct(h.cpu.peak)) · load \(String(format: "%.1f", h.load.first ?? 0))")
                     .font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
             }
-            ThresholdBarChart(series: h.cpu.series, threshold: .cpu)
+            ThresholdBarChart(series: h.cpu.series, rule: .hostCPU)
                 .frame(minHeight: 30)
         }
     }
@@ -54,7 +54,7 @@ struct HostWidgetView: View {
                 Text("avg \(pct(h.mem.avg)) · peak \(pct(h.mem.peak)) · swap \(Format.bytes(h.swap.used))")
                     .font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
             }
-            ThresholdBarChart(series: h.mem.series, threshold: .mem)
+            ThresholdBarChart(series: h.mem.series, rule: .hostMem)
                 .frame(minHeight: 30)
         }
     }
@@ -78,9 +78,15 @@ struct HostWidgetView: View {
         }
     }
 
-    private func storages(_ storages: [Storage]) -> some View {
+    private func storages(_ storages: [Storage], io: Pressure?) -> some View {
         SectionCard {
-            Caption("Storage")
+            HStack(spacing: 4) {
+                Caption("Storage")
+                Spacer(minLength: 4)
+                if let io, let now = io.now ?? io.avg {
+                    ioWait(now: now, peak: io.peak)
+                }
+            }
             VStack(alignment: .leading, spacing: 5) {
                 ForEach(storages, id: \.id) { st in
                     VStack(alignment: .leading, spacing: 2) {
@@ -97,6 +103,24 @@ struct HostWidgetView: View {
             }
         }
     }
+}
+
+/// "IO wait 3% · peak 15%": share of time tasks waited for disk, values colored by level.
+@MainActor private func ioWait(now: Double, peak: Double?) -> some View {
+    func value(_ v: Double, _ base: Color) -> Text {
+        let level = Threshold.ioPressure.level(v)
+        return Text(Format.percent(v)).foregroundStyle(level == .ok ? base : level.color)
+    }
+    return HStack(spacing: 3) {
+        Text("IO wait").foregroundStyle(.secondary)
+        value(now, .primary).fontWeight(.semibold).widgetAccentable()
+        if let peak {
+            Text("· peak").foregroundStyle(.secondary)
+            value(peak, .secondary)
+        }
+    }
+    .font(.system(size: 10))
+    .lineLimit(1)
 }
 
 /// Large "now" value.

@@ -27,6 +27,17 @@ def _rrd(runner, path, period, cf):
         return []
 
 
+def read_file(path):
+    with open(path) as f:
+        return f.read()
+
+
+def _guest_cgroup(typ, vmid):
+    if typ == "qemu":
+        return f"/sys/fs/cgroup/qemu.slice/{vmid}.scope"
+    return f"/sys/fs/cgroup/lxc/{vmid}"
+
+
 def _optional(fn):
     try:
         return fn()
@@ -34,8 +45,12 @@ def _optional(fn):
         return None
 
 
-def collect(period, runner=run_cmd):
+def collect(period, runner=run_cmd, reader=read_file):
     """Collect the raw dict consumed by build.build_snapshot."""
+    def psi(base, kinds):
+        return {k: _optional(lambda k=k: reader(f"{base}/{k}.pressure" if base else f"/proc/pressure/{k}"))
+                for k in kinds}
+
     status = _pvesh(runner, f"/nodes/{NODE}/status")
     resources = _pvesh(runner, "/cluster/resources")
     guests_res = [r for r in resources
@@ -63,11 +78,15 @@ def collect(period, runner=run_cmd):
                    "fsinfo": f.result() if f else None}
             for vmid, (a, m, f) in guest_futs.items()
         }
+        for r in guests_res:
+            if r.get("status") == "running":
+                guests[r["vmid"]]["psi"] = psi(_guest_cgroup(r["type"], r["vmid"]), ("cpu", "memory"))
         return {
             "status": status,
             "resources": resources,
             "sensors": sensors.result(),
             "node_rrd_avg": node_avg.result(),
             "node_rrd_max": node_max.result(),
+            "psi": psi(None, ("cpu", "memory", "io")),
             "guests": guests,
         }

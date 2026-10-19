@@ -4,7 +4,7 @@ import unittest
 
 from pvewidget.build import (
     build_host_now, build_snapshot, build_storages, build_temps,
-    pick_disk_from_fsinfo, series, stats,
+    parse_psi, pick_disk_from_fsinfo, series, stats,
 )
 
 FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
@@ -133,8 +133,52 @@ class BuildTests(unittest.TestCase):
         self.assertIsNone(snap["guests"][0]["cpu"]["avg"])
         self.assertGreater(len(snap["guests"][2]["cpu"]["series"]), 0)
         for m in (h["cpu"], h["mem"], snap["guests"][2]["cpu"]):
-            self.assertTrue(all(len(p) == 3 and p[2] >= p[1] for p in m["series"]))
+            self.assertTrue(all(len(p) == 5 and p[2] >= p[1] and p[4] >= p[3] for p in m["series"]))
             self.assertEqual(max(p[2] for p in m["series"]), m["peak"])
+            self.assertAlmostEqual(max(p[4] for p in m["series"]), m["pressure"]["peak"])
+            self.assertTrue(all(0 <= p[3] <= 1 for p in m["series"]))
+        self.assertIsNone(h["cpu"]["pressure"]["now"])
+        self.assertIsNotNone(h["io_pressure"]["peak"])
+        self.assertIsNone(snap["guests"][2]["mem_pressure"])
+
+    def test_psi_now_in_snapshot(self):
+        raw = fixture_raw()
+        text = "some avg10=1.00 avg60=12.00 avg300=0.00 total=1\nfull avg10=0.00 avg60=3.00 avg300=0.00 total=1\n"
+        raw["psi"] = {"cpu": text, "memory": text, "io": text}
+        raw["guests"][102]["psi"] = {"cpu": text, "memory": text}
+        snap = build_snapshot("day", 1, raw)
+        h = snap["host"]
+        self.assertAlmostEqual(h["cpu"]["pressure"]["now"], 0.12)
+        self.assertAlmostEqual(h["mem"]["pressure"]["now"], 0.03)
+        self.assertAlmostEqual(h["io_pressure"]["now"], 0.12)
+        g = [x for x in snap["guests"] if x["vmid"] == 102][0]
+        self.assertAlmostEqual(g["cpu"]["pressure"]["now"], 0.12)
+        self.assertAlmostEqual(g["mem_pressure"], 0.03)
+
+    def test_parse_psi(self):
+        text = "some avg10=0.10 avg60=4.00 avg300=0.00 total=5\nfull avg10=0.00 avg60=1.50 avg300=0.00 total=2\n"
+        self.assertAlmostEqual(parse_psi(text), 0.04)
+        self.assertAlmostEqual(parse_psi(text, "full"), 0.015)
+        self.assertIsNone(parse_psi("some avg10=1.0\n"))
+        self.assertIsNone(parse_psi(None))
+        self.assertIsNone(parse_psi("some avg60=x\n"))
+
+    def test_series_pressure(self):
+        avg_rows = [{"time": t, "cpu": 0.5, "pressurecpusome": p} for t, p in ((1, 10), (2, 20), (3, None), (4, 4))]
+        avg_rows[2].pop("pressurecpusome")
+        max_rows = [{"time": 2, "cpu": 0.6, "pressurecpusome": 50}, {"time": 4, "cpu": 0.5, "pressurecpusome": 1}]
+        s = series(avg_rows, "cpu", max_points=2, max_rows=max_rows, pressure_key="pressurecpusome")
+        self.assertEqual(len(s), 2)
+        self.assertEqual(s[0][:3], [2, 0.5, 0.6])
+        self.assertAlmostEqual(s[0][3], 0.15)
+        self.assertAlmostEqual(s[0][4], 0.5)
+        # Bucket 2 has one pressure row; peak never below avg.
+        self.assertAlmostEqual(s[1][3], 0.04)
+        self.assertAlmostEqual(s[1][4], 0.04)
+
+    def test_series_without_pressure_rows_keeps_three_values(self):
+        rows = [{"time": 1, "cpu": 0.2}, {"time": 2, "cpu": 0.4}]
+        self.assertEqual(series(rows, "cpu", pressure_key="pressurecpusome"), [[1, 0.2, 0.2], [2, 0.4, 0.4]])
 
     def test_null_guest_fields_never_emitted(self):
         raw = fixture_raw()

@@ -6,19 +6,29 @@ struct Point: Sendable, Equatable, Codable {
     let avg: Double
     /// Peak within the bucket; equals avg when the collector has no peak data.
     let max: Double
+    /// Mean and peak pressure (PSI, 0...1) within the bucket; nil when the bucket has no PSI data.
+    let pressureAvg: Double?
+    let pressureMax: Double?
 
-    init(t: Date, avg: Double, max: Double) {
+    init(t: Date, avg: Double, max: Double, pressureAvg: Double? = nil, pressureMax: Double? = nil) {
         self.t = t
         self.avg = avg
         self.max = max
+        self.pressureAvg = pressureAvg
+        self.pressureMax = pressureMax ?? pressureAvg
     }
 
-    // Decoded from [epoch seconds, avg, max] or the legacy [epoch seconds, value].
+    // Decoded from [epoch seconds, avg, max, pressure avg, pressure max], the same without
+    // pressure, or the legacy [epoch seconds, value].
     init(from decoder: Decoder) throws {
         var c = try decoder.unkeyedContainer()
         t = Date(timeIntervalSince1970: try c.decode(Double.self))
         avg = try c.decode(Double.self)
         max = c.isAtEnd ? avg : try c.decode(Double.self)
+        let pAvg = c.isAtEnd ? nil : try c.decode(Double?.self)
+        let pMax = c.isAtEnd ? nil : try c.decode(Double?.self)
+        pressureAvg = pAvg
+        pressureMax = pMax ?? pAvg
     }
 
     func encode(to encoder: Encoder) throws {
@@ -26,7 +36,18 @@ struct Point: Sendable, Equatable, Codable {
         try c.encode(t.timeIntervalSince1970)
         try c.encode(avg)
         try c.encode(max)
+        if let pressureAvg {
+            try c.encode(pressureAvg)
+            try c.encode(pressureMax ?? pressureAvg)
+        }
     }
+}
+
+/// Pressure stall information (share of time tasks waited, 0...1): live value and period stats.
+struct Pressure: Codable, Sendable, Equatable {
+    var now: Double?
+    var avg: Double?
+    var peak: Double?
 }
 
 struct Metric: Codable, Sendable, Equatable {
@@ -34,6 +55,7 @@ struct Metric: Codable, Sendable, Equatable {
     var avg: Double?
     var peak: Double?
     var series: [Point]
+    var pressure: Pressure? = nil
 }
 
 struct Usage: Codable, Sendable, Equatable {
@@ -52,6 +74,7 @@ struct HostMem: Codable, Sendable, Equatable {
     var avg: Double?
     var peak: Double?
     var series: [Point]
+    var pressure: Pressure? = nil
 
     var usage: Usage { Usage(used: used, total: total) }
     var ratio: Double { usage.ratio }
@@ -90,6 +113,7 @@ struct Host: Codable, Sendable, Equatable {
     var cpu: Metric
     var mem: HostMem
     var swap: Usage
+    var ioPressure: Pressure? = nil
     var temps: [Temp]
     var storages: [Storage]
 }
@@ -102,6 +126,8 @@ struct Guest: Codable, Sendable, Equatable {
     var cpus: Int
     var cpu: Metric
     var mem: Usage
+    /// Live "full" memory pressure of the guest cgroup.
+    var memPressure: Double? = nil
     var disk: Disk?
 }
 

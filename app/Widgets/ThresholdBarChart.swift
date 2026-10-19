@@ -11,7 +11,8 @@ extension Level {
     }
 }
 
-/// One vertical piece of a bar on the 0...1 axis, colored by the level of its top value.
+/// One vertical piece of a bar on the 0...1 axis, colored by the level of its top value
+/// (and the bucket's pressure when there is one).
 struct BarSegment: Equatable {
     let from: Double
     let to: Double
@@ -19,13 +20,16 @@ struct BarSegment: Equatable {
 }
 
 /// Opaque base 0...avg plus, when max is higher, an overlay avg...max. Values are clamped to 0...1.
-func barSegments(_ p: Point, _ th: Threshold) -> [BarSegment] {
+/// The base takes the level of avg with the mean pressure, the overlay of max with the peak pressure.
+func barSegments(_ p: Point, _ rule: LevelRule) -> [BarSegment] {
     func clamp(_ v: Double) -> Double { min(max(v, 0), 1) }
     let avg = clamp(p.avg), top = clamp(Swift.max(p.max, p.avg))
-    let base = BarSegment(from: 0, to: avg, level: th.level(avg))
+    let base = BarSegment(from: 0, to: avg, level: rule.level(avg, pressure: p.pressureAvg))
     guard top > avg else { return [base] }
-    return [base, BarSegment(from: avg, to: top, level: th.level(top))]
+    return [base, BarSegment(from: avg, to: top, level: rule.level(top, pressure: p.pressureMax))]
 }
+
+func barSegments(_ p: Point, _ th: Threshold) -> [BarSegment] { barSegments(p, LevelRule(th)) }
 
 /// Horizontal extents of count bars that fill width, separated by a small gap.
 func barSlots(count: Int, width: CGFloat) -> [ClosedRange<CGFloat>] {
@@ -48,7 +52,16 @@ extension ClosedRange where Bound == CGFloat {
 /// Bar chart of a 0...1 series: an opaque avg bar with a semi-transparent max bar on top.
 struct ThresholdBarChart: View {
     let series: [Point]
-    let threshold: Threshold
+    let rule: LevelRule
+
+    init(series: [Point], rule: LevelRule) {
+        self.series = series
+        self.rule = rule
+    }
+
+    init(series: [Point], threshold: Threshold) {
+        self.init(series: series, rule: LevelRule(threshold))
+    }
 
     var body: some View {
         ZStack {
@@ -61,7 +74,7 @@ struct ThresholdBarChart: View {
     private func layer(index: Int) -> some View {
         Canvas { ctx, size in
             for (slot, p) in zip(barSlots(count: series.count, width: size.width), series) {
-                let segs = barSegments(p, threshold)
+                let segs = barSegments(p, rule)
                 guard index < segs.count else { continue }
                 let s = segs[index]
                 let rect = CGRect(x: slot.minX, y: size.height * (1 - s.to),

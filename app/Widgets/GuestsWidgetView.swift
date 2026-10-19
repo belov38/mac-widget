@@ -116,9 +116,9 @@ struct GuestCard: View {
     }
 
     @ViewBuilder private var metrics: some View {
-        row("CPU", ratio: guest.cpu.now, level: Threshold.cpu.level(guest.cpu.now), value: Format.percent(guest.cpu.now))
+        row("CPU", ratio: guest.cpu.now, level: guest.cpuLevel, value: Format.percent(guest.cpu.now))
         if guest.cpu.series.count > 1 {
-            ThresholdBarChart(series: guest.cpu.series, threshold: .cpu)
+            ThresholdBarChart(series: guest.cpu.series, rule: guest.cpuRule)
                 .frame(minHeight: 6, maxHeight: .infinity)
         } else {
             Text("no history yet")
@@ -133,7 +133,7 @@ struct GuestCard: View {
         }
         .font(.system(size: 9))
         .foregroundStyle(.secondary)
-        row("RAM", ratio: guest.mem.ratio, level: Threshold.mem.level(guest.mem.ratio),
+        row("RAM", ratio: guest.mem.ratio, level: guest.memLevel,
             value: Format.usage(guest.mem.used, guest.mem.total))
         if let d = guest.disk {
             row("Disk", ratio: d.usage.ratio, level: Threshold.disk.level(d.usage.ratio), value: Format.free(d.used, d.total))

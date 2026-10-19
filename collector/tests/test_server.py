@@ -52,14 +52,38 @@ def fake_runner(hang_paths=(), fail_cmd=None):
     return run
 
 
+PSI_TEXT = "some avg10=1.00 avg60=2.50 avg300=0.00 total=1\nfull avg10=0.50 avg60=1.25 avg300=0.00 total=1\n"
+
+
+def fake_reader(paths):
+    def read(path):
+        paths.append(path)
+        if path.startswith("/sys/fs/cgroup/lxc/105"):
+            raise FileNotFoundError(path)
+        return PSI_TEXT
+    return read
+
+
 class CollectTests(unittest.TestCase):
     def test_raw_shape(self):
         raw = collect("day", runner=fake_runner())
-        self.assertEqual(set(raw), {"status", "resources", "sensors", "node_rrd_avg", "node_rrd_max", "guests"})
+        self.assertEqual(set(raw), {"status", "resources", "sensors", "node_rrd_avg", "node_rrd_max", "psi", "guests"})
         self.assertIn(101, raw["guests"])
         self.assertNotIn(9000, raw["guests"])
         self.assertIsNotNone(raw["guests"][101]["fsinfo"])
         self.assertTrue(raw["guests"][102]["rrd_avg"])
+
+    def test_psi_files(self):
+        paths = []
+        raw = collect("day", runner=fake_runner(), reader=fake_reader(paths))
+        self.assertEqual(raw["psi"], {"cpu": PSI_TEXT, "memory": PSI_TEXT, "io": PSI_TEXT})
+        self.assertIn("/proc/pressure/io", paths)
+        self.assertEqual(raw["guests"][102]["psi"]["cpu"], PSI_TEXT)
+        self.assertIn("/sys/fs/cgroup/qemu.slice/102.scope/memory.pressure", paths)
+        self.assertEqual(raw["guests"][105]["psi"], {"cpu": None, "memory": None})
+        running = {r["vmid"] for r in load("cluster_resources.json")
+                   if r.get("status") == "running" and r.get("template") != 1 and r.get("type") in ("qemu", "lxc")}
+        self.assertEqual({v for v, g in raw["guests"].items() if "psi" in g}, running)
 
     def test_templates_skipped(self):
         res = [r for r in load("cluster_resources.json") if r.get("template") == 1]

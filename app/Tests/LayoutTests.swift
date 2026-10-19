@@ -35,6 +35,14 @@ final class LayoutTests: XCTestCase {
                        [BarSegment(from: 0, to: 0, level: .ok), BarSegment(from: 0, to: 0.2, level: .ok)])
     }
 
+    func testBarSegmentsColoredByPressure() {
+        let p = Point(t: Date(timeIntervalSince1970: 0), avg: 0.95, max: 1.0, pressureAvg: 0.01, pressureMax: 0.3)
+        XCTAssertEqual(barSegments(p, LevelRule.hostCPU),
+                       [BarSegment(from: 0, to: 0.95, level: .ok), BarSegment(from: 0.95, to: 1, level: .crit)])
+        // Buckets without PSI fall back to usage.
+        XCTAssertEqual(barSegments(point(0.95, 0.95), LevelRule.hostCPU), [BarSegment(from: 0, to: 0.95, level: .crit)])
+    }
+
     func testBarSlotsFillWidthWithGap() {
         let slots = barSlots(count: 4, width: 100)
         XCTAssertEqual(slots.count, 4)

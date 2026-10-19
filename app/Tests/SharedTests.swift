@@ -30,6 +30,65 @@ final class SharedTests: XCTestCase {
         XCTAssertThrowsError(try decoder.decode([Point].self, from: Data("[[10]]".utf8)))
     }
 
+    func testDecodePointWithPressure() throws {
+        let decoder = JSONDecoder()
+        let p = try decoder.decode([Point].self, from: Data("[[10, 0.3, 0.92, 0.05, 0.2], [20, 0.1, 0.1, null, null]]".utf8))
+        XCTAssertEqual(p[0], Point(t: Date(timeIntervalSince1970: 10), avg: 0.3, max: 0.92, pressureAvg: 0.05, pressureMax: 0.2))
+        XCTAssertNil(p[1].pressureAvg)
+        let data = try JSONEncoder().encode(p[0])
+        XCTAssertEqual(String(decoding: data, as: UTF8.self), "[10,0.3,0.92,0.05,0.2]")
+    }
+
+    func testDecodeSnapshotPressureFields() throws {
+        let json = """
+        {"generated_at": 1, "host": {"name": "pve", "uptime_s": 1, "cpus": 4, "load": [1],
+          "cpu": {"now": 0.5, "avg": null, "peak": null, "series": [], "pressure": {"now": 0.12, "avg": 0.01, "peak": 0.3}},
+          "mem": {"used": 1, "total": 2, "avg": null, "peak": null, "series": [], "pressure": {"now": null, "avg": null, "peak": null}},
+          "swap": {"used": 0, "total": 0}, "io_pressure": {"now": 0.02, "avg": 0.01, "peak": 0.15},
+          "temps": [], "storages": []},
+         "guests": [{"vmid": 105, "type": "lxc", "name": "ct", "status": "running", "cpus": 1,
+          "cpu": {"now": 0.1, "avg": null, "peak": null, "series": []}, "mem": {"used": 1, "total": 2},
+          "mem_pressure": 0.02, "disk": null}]}
+        """
+        let s = try Snapshot.decode(Data(json.utf8))
+        XCTAssertEqual(s.host.cpu.pressure?.now, 0.12)
+        XCTAssertNil(s.host.mem.pressure?.now)
+        XCTAssertEqual(s.host.ioPressure?.peak, 0.15)
+        XCTAssertEqual(s.guests[0].memPressure, 0.02)
+        XCTAssertNil(s.guests[0].cpu.pressure)
+    }
+
+    func testLevelRules() {
+        // Host CPU: pressure decides, usage only without PSI.
+        XCTAssertEqual(LevelRule.hostCPU.level(1.0, pressure: 0.02), .ok)
+        XCTAssertEqual(LevelRule.hostCPU.level(0.2, pressure: 0.12), .warn)
+        XCTAssertEqual(LevelRule.hostCPU.level(0.2, pressure: 0.3), .crit)
+        XCTAssertEqual(LevelRule.hostCPU.level(0.95, pressure: nil), .crit)
+        // Host memory: pressure, but near-full is red anyway.
+        XCTAssertEqual(LevelRule.hostMem.level(0.92, pressure: 0), .ok)
+        XCTAssertEqual(LevelRule.hostMem.level(0.96, pressure: 0), .crit)
+        XCTAssertEqual(LevelRule.hostMem.level(0.5, pressure: 0.02), .warn)
+        XCTAssertEqual(LevelRule.hostMem.level(0.92, pressure: nil), .warn)
+    }
+
+    func testGuestLevels() {
+        func guest(_ type: String, cpu: Double, cpuPressure: Double?, mem: Int64, memPressure: Double?) -> Guest {
+            Guest(vmid: 1, type: type, name: "g", status: "running", cpus: 2,
+                  cpu: Metric(now: cpu, avg: nil, peak: nil, series: [],
+                              pressure: cpuPressure.map { Pressure(now: $0) }),
+                  mem: Usage(used: mem, total: 100), memPressure: memPressure, disk: nil)
+        }
+        // A busy VM stays red even without host-side pressure; a busy CT does not.
+        XCTAssertEqual(guest("qemu", cpu: 0.95, cpuPressure: 0, mem: 10, memPressure: nil).cpuLevel, .crit)
+        XCTAssertEqual(guest("lxc", cpu: 0.95, cpuPressure: 0, mem: 10, memPressure: nil).cpuLevel, .ok)
+        // Host contention shows on an idle-looking VM.
+        XCTAssertEqual(guest("qemu", cpu: 0.2, cpuPressure: 0.3, mem: 10, memPressure: nil).cpuLevel, .crit)
+        // VM memory ignores host-side PSI; CT memory uses it.
+        XCTAssertEqual(guest("qemu", cpu: 0, cpuPressure: nil, mem: 92, memPressure: 0).memLevel, .warn)
+        XCTAssertEqual(guest("lxc", cpu: 0, cpuPressure: nil, mem: 92, memPressure: 0).memLevel, .ok)
+        XCTAssertEqual(guest("lxc", cpu: 0, cpuPressure: nil, mem: 50, memPressure: 0.06).memLevel, .crit)
+    }
+
     func testPointEncodesThreeElements() throws {
         let data = try JSONEncoder().encode(Point(t: Date(timeIntervalSince1970: 10), avg: 0.25, max: 0.5))
         XCTAssertEqual(String(decoding: data, as: UTF8.self), "[10,0.25,0.5]")

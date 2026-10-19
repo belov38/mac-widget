@@ -3,6 +3,9 @@ import bisect
 
 from . import config
 
+# PSI values come in percent; the snapshot keeps every ratio in 0...1.
+PSI_SCALE = 0.01
+
 
 def _reading(chip_data, chip):
     feature = chip_data.get(config.SENSOR_FEATURES.get(chip, config.DEFAULT_FEATURE))
@@ -72,7 +75,7 @@ def build_host_now(status, resources):
     }
 
 
-def _points(rows, key, denom_key=None):
+def _points(rows, key, denom_key=None, scale=1.0):
     pts = []
     for row in rows or []:
         t, v = row.get("time"), row.get(key)
@@ -83,16 +86,25 @@ def _points(rows, key, denom_key=None):
             if not d:
                 continue
             v = v / d
-        pts.append((t, v))
+        pts.append((t, v * scale))
     return pts
 
 
-def series(rows, key, max_points=96, denom_key=None, max_rows=None):
+def _bucket_index(ends, t):
+    i = bisect.bisect_left(ends, t)
+    return i if i < len(ends) else None
+
+
+def series(rows, key, max_points=96, denom_key=None, max_rows=None, pressure_key=None):
     """Return [[time, avg, max]] points in at most max_points buckets.
 
     avg is the mean of the bucket's AVERAGE rows. max is the max of the MAX rows whose
     time falls into the bucket, (previous bucket end, bucket end]; it falls back to avg
     when the bucket has no MAX rows and is never below avg.
+
+    With pressure_key, buckets that have pressure data get two more values,
+    [time, avg, max, pressure avg, pressure max], built the same way and scaled from
+    percent to 0...1.
     """
     pts = _points(rows, key, denom_key)
     n = len(pts)
@@ -101,21 +113,58 @@ def series(rows, key, max_points=96, denom_key=None, max_rows=None):
     ends = [c[-1][0] for c in chunks]
     peaks = [None] * buckets
     for t, v in _points(max_rows, key, denom_key):
-        i = bisect.bisect_left(ends, t)
-        if i < buckets and (peaks[i] is None or v > peaks[i]):
+        i = _bucket_index(ends, t)
+        if i is not None and (peaks[i] is None or v > peaks[i]):
             peaks[i] = v
+    p_sums, p_counts, p_peaks = [0.0] * buckets, [0] * buckets, [None] * buckets
+    if pressure_key is not None:
+        for t, v in _points(rows, pressure_key, scale=PSI_SCALE):
+            i = _bucket_index(ends, t)
+            if i is not None:
+                p_sums[i] += v
+                p_counts[i] += 1
+        for t, v in _points(max_rows, pressure_key, scale=PSI_SCALE):
+            i = _bucket_index(ends, t)
+            if i is not None and (p_peaks[i] is None or v > p_peaks[i]):
+                p_peaks[i] = v
     out = []
-    for chunk, end, peak in zip(chunks, ends, peaks):
+    for i, (chunk, end, peak) in enumerate(zip(chunks, ends, peaks)):
         avg = sum(v for _, v in chunk) / len(chunk)
-        out.append([end, avg, avg if peak is None else max(peak, avg)])
+        point = [end, avg, avg if peak is None else max(peak, avg)]
+        if p_counts[i]:
+            p_avg = p_sums[i] / p_counts[i]
+            point += [p_avg, p_avg if p_peaks[i] is None else max(p_peaks[i], p_avg)]
+        out.append(point)
     return out
 
 
-def stats(avg_rows, max_rows, key, denom_key=None):
+def stats(avg_rows, max_rows, key, denom_key=None, scale=1.0):
     """Return (mean over AVERAGE rows, max over MAX rows); None when no data."""
-    avg = [v for _, v in _points(avg_rows, key, denom_key)]
-    peak = [v for _, v in _points(max_rows, key, denom_key)]
+    avg = [v for _, v in _points(avg_rows, key, denom_key, scale)]
+    peak = [v for _, v in _points(max_rows, key, denom_key, scale)]
     return (sum(avg) / len(avg) if avg else None, max(peak) if peak else None)
+
+
+def parse_psi(text, line="some"):
+    """Return avg60 of a PSI file line ("some" or "full") as 0...1; None when missing."""
+    for row in (text or "").splitlines():
+        parts = row.split()
+        if not parts or parts[0] != line:
+            continue
+        for field in parts[1:]:
+            name, _, value = field.partition("=")
+            if name == "avg60":
+                try:
+                    return float(value) * PSI_SCALE
+                except ValueError:
+                    return None
+    return None
+
+
+def pressure(avg_rows, max_rows, key, now):
+    """Pressure summary: now from the live PSI file, avg/peak over the period."""
+    avg, peak = stats(avg_rows, max_rows, key, scale=PSI_SCALE)
+    return {"now": now, "avg": avg, "peak": peak}
 
 
 def pick_disk_from_fsinfo(fsinfo):
@@ -134,13 +183,18 @@ def pick_disk_from_fsinfo(fsinfo):
     return {"used": best["used-bytes"], "total": best["total-bytes"], "mount": best.get("mountpoint", "")}
 
 
-def _metric(now, avg_rows, max_rows, key, denom_key=None):
+def _metric(now, avg_rows, max_rows, key, denom_key=None, pressure_key=None, pressure_now=None):
     avg, peak = stats(avg_rows, max_rows, key, denom_key)
-    return {"now": now, "avg": avg, "peak": peak, "series": series(avg_rows, key, denom_key=denom_key, max_rows=max_rows)}
+    out = {"now": now, "avg": avg, "peak": peak,
+           "series": series(avg_rows, key, denom_key=denom_key, max_rows=max_rows, pressure_key=pressure_key)}
+    if pressure_key is not None:
+        out["pressure"] = pressure(avg_rows, max_rows, pressure_key, pressure_now)
+    return out
 
 
-def build_guest(res, rrd_avg, rrd_max, disk):
-    """Build one guest object."""
+def build_guest(res, rrd_avg, rrd_max, disk, psi=None):
+    """Build one guest object. psi holds the raw cgroup cpu/memory pressure files."""
+    psi = psi or {}
     if res.get("type") == "lxc":
         if res.get("maxdisk"):
             disk = {"used": res["disk"], "total": res["maxdisk"], "mount": "/"}
@@ -154,8 +208,10 @@ def build_guest(res, rrd_avg, rrd_max, disk):
         "name": res.get("name") or f"{res['type']} {res['vmid']}",
         "status": res.get("status", "unknown"),
         "cpus": res.get("maxcpu") or 0,
-        "cpu": _metric(res.get("cpu") or 0.0, rrd_avg, rrd_max, "cpu"),
+        "cpu": _metric(res.get("cpu") or 0.0, rrd_avg, rrd_max, "cpu",
+                       pressure_key="pressurecpusome", pressure_now=parse_psi(psi.get("cpu"))),
         "mem": {"used": res.get("mem") or 0, "total": res.get("maxmem") or 0},
+        "mem_pressure": parse_psi(psi.get("memory"), "full"),
         "disk": disk,
     }
 
@@ -164,7 +220,9 @@ def build_snapshot(period, now, raw):
     """Assemble the full snapshot from raw pve data."""
     h = build_host_now(raw["status"], raw["resources"])
     avg_rows, max_rows = raw.get("node_rrd_avg"), raw.get("node_rrd_max")
-    mem = _metric(None, avg_rows, max_rows, "memused", "memtotal")
+    psi = raw.get("psi") or {}
+    mem = _metric(None, avg_rows, max_rows, "memused", "memtotal", pressure_key="pressurememoryfull",
+                  pressure_now=parse_psi(psi.get("memory"), "full"))
     mem.pop("now")
     mem = {"used": h["mem_used"], "total": h["mem_total"], **mem}
     host = {
@@ -172,8 +230,10 @@ def build_snapshot(period, now, raw):
         "uptime_s": h["uptime_s"],
         "cpus": h["cpus"],
         "load": h["load"],
-        "cpu": _metric(h["cpu_now"], avg_rows, max_rows, "cpu"),
+        "cpu": _metric(h["cpu_now"], avg_rows, max_rows, "cpu", pressure_key="pressurecpusome",
+                       pressure_now=parse_psi(psi.get("cpu"))),
         "mem": mem,
+        "io_pressure": pressure(avg_rows, max_rows, "pressureiosome", parse_psi(psi.get("io"))),
         "swap": {"used": h["swap_used"], "total": h["swap_total"]},
         "temps": build_temps(raw.get("sensors")),
         "storages": build_storages(raw["resources"]),
@@ -185,6 +245,6 @@ def build_snapshot(period, now, raw):
             continue
         g = extra.get(res["vmid"], {})
         disk = pick_disk_from_fsinfo(g["fsinfo"]) if g.get("fsinfo") else None
-        guests.append(build_guest(res, g.get("rrd_avg", []), g.get("rrd_max", []), disk))
+        guests.append(build_guest(res, g.get("rrd_avg", []), g.get("rrd_max", []), disk, g.get("psi")))
     guests.sort(key=lambda x: x["vmid"])
     return {"schema": 1, "generated_at": now, "period": period, "host": host, "guests": guests}

@@ -70,6 +70,7 @@ extension Snapshot {
                 cpu: Metric(now: 0.44, avg: 0.31, peak: 0.92, series: series(0.4)),
                 mem: HostMem(used: 100 * gib, total: 125 * gib, avg: 0.78, peak: 0.82, series: series(0.78)),
                 swap: Usage(used: gib, total: 32 * gib),
+                ioPressure: Pressure(now: 0.02, avg: 0.01, peak: 0.15),
                 temps: [Temp(id: "cpu", label: "CPU", value: 62, warn: 85, crit: 95)],
                 storages: [Storage(id: "vmdata", label: "vmdata", used: 800 * gib, total: 1580 * gib)]
             ),
