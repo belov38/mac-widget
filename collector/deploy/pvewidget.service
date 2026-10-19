@@ -1,0 +1,17 @@
+[Unit]
+Description=PVE widget collector (read-only snapshot API on 127.0.0.1:9184)
+After=network-online.target pve-cluster.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/pvewidget
+EnvironmentFile=/etc/pvewidget.env
+ExecStart=/usr/bin/python3 -m pvewidget.server
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

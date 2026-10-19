@@ -1,0 +1,96 @@
+name: PveWidget
+options:
+  deploymentTarget:
+    macOS: "26.0"
+configFiles:
+  Debug: Config.xcconfig
+  Release: Config.xcconfig
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    CODE_SIGN_STYLE: Automatic
+    MACOSX_DEPLOYMENT_TARGET: "26.0"
+targets:
+  PveWidget:
+    type: application
+    platform: macOS
+    sources:
+      - App
+      - Shared
+      - path: Widgets
+        excludes: [PveWidgetBundle.swift, Info.plist, "*.entitlements"]
+    entitlements:
+      path: App/PveWidget.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+        com.apple.security.application-groups: ["$(APP_GROUP_ID)"]
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: PVE Widget
+        PVEHost: $(PVE_HOST)
+        AppGroupID: $(APP_GROUP_ID)
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        CFBundleURLTypes:
+          - CFBundleURLName: $(PRODUCT_BUNDLE_IDENTIFIER)
+            CFBundleURLSchemes: [pvewidget]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).pvewidget
+        GENERATE_INFOPLIST_FILE: NO
+    dependencies:
+      - target: PveWidgetWidgets
+        embed: true
+  PveWidgetWidgets:
+    type: app-extension
+    platform: macOS
+    sources: [Widgets, Shared]
+    entitlements:
+      path: Widgets/PveWidgetWidgets.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+        com.apple.security.application-groups: ["$(APP_GROUP_ID)"]
+    info:
+      path: Widgets/Info.plist
+      properties:
+        CFBundleDisplayName: PVE Widgets
+        PVEHost: $(PVE_HOST)
+        AppGroupID: $(APP_GROUP_ID)
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).pvewidget.widgets
+        GENERATE_INFOPLIST_FILE: NO
+  PveWidgetTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests
+        excludes: [Fixtures]
+      - path: Tests/Fixtures
+        buildPhase: resources
+      - Shared
+      - path: Widgets
+        excludes: [PveWidgetBundle.swift, Info.plist, "*.entitlements"]
+    dependencies:
+      - target: PveWidget
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).pvewidget.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/PveWidget.app/Contents/MacOS/PveWidget"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+schemes:
+  PveWidget:
+    build:
+      targets:
+        PveWidget: all
+        PveWidgetWidgets: all
+    test:
+      targets: [PveWidgetTests]

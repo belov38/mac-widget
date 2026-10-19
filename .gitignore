@@ -1,0 +1,8 @@
+.superpowers/
+app/build/
+app/*.xcodeproj/
+__pycache__/
+*.pyc
+.DS_Store
+app/Local.xcconfig
+local.env

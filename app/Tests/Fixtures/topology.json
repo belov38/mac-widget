@@ -1,0 +1,272 @@
+{
+ "schema": 1,
+ "generatedAt": "2026-10-19T03:03:40Z",
+ "self": {
+  "name": "macbook",
+  "os": "macOS",
+  "derp": "syd",
+  "lan": [
+   "192.168.1.109"
+  ],
+  "udp": true,
+  "ipv6": false,
+  "hardNat": false,
+  "preferredDerp": "syd",
+  "derpMs": 34.9,
+  "publicAddr": "1.2.3.4:41641"
+ },
+ "nodes": [
+  {
+   "id": "n01example0CNTRL",
+   "name": "cli",
+   "os": "linux",
+   "online": true,
+   "lastSeen": null,
+   "derp": "syd",
+   "ip": "100.64.0.10",
+   "parent": "pve",
+   "exitNode": false,
+   "path": {
+    "kind": "lan",
+    "via": "192.168.1.146:41641",
+    "ms": 4.0,
+    "minMs": 4.0,
+    "maxMs": 5.0,
+    "n": 8
+   }
+  },
+  {
+   "id": "n02example0CNTRL",
+   "name": "vm-tools",
+   "os": "linux",
+   "online": true,
+   "lastSeen": null,
+   "derp": "syd",
+   "ip": "100.64.0.11",
+   "parent": "pve",
+   "exitNode": false,
+   "path": {
+    "kind": "lan",
+    "via": "192.168.1.118:41641",
+    "ms": 4.0,
+    "minMs": 3.0,
+    "maxMs": 4.0,
+    "n": 8
+   }
+  },
+  {
+   "id": "n03example0CNTRL",
+   "name": "ct-app",
+   "os": "linux",
+   "online": true,
+   "lastSeen": null,
+   "derp": "syd",
+   "ip": "100.64.0.12",
+   "parent": "pve",
+   "exitNode": false,
+   "path": {
+    "kind": "lan",
+    "via": "192.168.1.114:41641",
+    "ms": 4.0,
+    "minMs": 4.0,
+    "maxMs": 5.0,
+    "n": 8
+   }
+  },
+  {
+   "id": "n04example0CNTRL",
+   "name": "vm-legacy",
+   "os": "linux",
+   "online": false,
+   "lastSeen": "2026-10-12T07:59:09.1Z",
+   "derp": null,
+   "ip": "100.64.0.13",
+   "parent": "pve",
+   "exitNode": false,
+   "path": null
+  },
+  {
+   "id": "n05example0CNTRL",
+   "name": "ws-1",
+   "os": "linux",
+   "online": true,
+   "lastSeen": "2026-10-17T01:50:00.1Z",
+   "derp": "syd",
+   "ip": "100.64.0.14",
+   "parent": null,
+   "exitNode": false,
+   "path": {
+    "kind": "lan",
+    "via": "192.168.1.108:64743",
+    "ms": 374.0,
+    "minMs": 370.0,
+    "maxMs": 376.0,
+    "n": 8
+   }
+  },
+  {
+   "id": "n06example0CNTRL",
+   "name": "ws-win",
+   "os": "windows",
+   "online": true,
+   "lastSeen": "2026-10-17T01:50:00.1Z",
+   "derp": "syd",
+   "ip": "100.64.0.15",
+   "parent": null,
+   "exitNode": false,
+   "path": {
+    "kind": "lan",
+    "via": "192.168.1.108:41641",
+    "ms": 374.5,
+    "minMs": 367.0,
+    "maxMs": 376.0,
+    "n": 8
+   }
+  },
+  {
+   "id": "n07example0CNTRL",
+   "name": "old-server",
+   "os": "linux",
+   "online": false,
+   "lastSeen": "2026-10-16T11:10:59.1Z",
+   "derp": "syd",
+   "ip": "100.64.0.16",
+   "parent": null,
+   "exitNode": false,
+   "path": null
+  },
+  {
+   "id": "n08example0CNTRL",
+   "name": "vm-hub",
+   "os": "linux",
+   "online": true,
+   "lastSeen": null,
+   "derp": "syd",
+   "ip": "100.64.0.17",
+   "parent": "pve",
+   "exitNode": false,
+   "path": {
+    "kind": "lan",
+    "via": "192.168.1.120:41641",
+    "ms": 5.0,
+    "minMs": 4.0,
+    "maxMs": 6.0,
+    "n": 8
+   }
+  },
+  {
+   "id": "n09example0CNTRL",
+   "name": "iphone",
+   "os": "iOS",
+   "online": true,
+   "lastSeen": "2026-10-18T07:50:00.1Z",
+   "derp": "syd",
+   "ip": "100.64.0.18",
+   "parent": null,
+   "exitNode": false,
+   "path": {
+    "kind": "lan",
+    "via": "192.168.1.102:41641",
+    "ms": 13.0,
+    "minMs": 8.0,
+    "maxMs": 15.0,
+    "n": 8
+   }
+  },
+  {
+   "id": "n10example0CNTRL",
+   "name": "k3s-cloud",
+   "os": "linux",
+   "online": true,
+   "lastSeen": null,
+   "derp": "nue",
+   "ip": "100.64.0.19",
+   "parent": null,
+   "exitNode": false,
+   "path": {
+    "kind": "derp",
+    "via": "nue",
+    "ms": 599.0,
+    "minMs": 590.0,
+    "maxMs": 1517.0,
+    "n": 8
+   }
+  },
+  {
+   "id": "n11example0CNTRL",
+   "name": "pve",
+   "os": "linux",
+   "online": true,
+   "lastSeen": null,
+   "derp": "syd",
+   "ip": "100.64.0.20",
+   "parent": null,
+   "exitNode": false,
+   "path": {
+    "kind": "lan",
+    "via": "192.168.1.116:41641",
+    "ms": 4.0,
+    "minMs": 4.0,
+    "maxMs": 5.0,
+    "n": 8
+   }
+  },
+  {
+   "id": "n12example0CNTRL",
+   "name": "vm-dev",
+   "os": "linux",
+   "online": true,
+   "lastSeen": "2026-10-17T01:50:00.1Z",
+   "derp": "syd",
+   "ip": "100.64.0.21",
+   "parent": "pve",
+   "exitNode": false,
+   "path": {
+    "kind": "lan",
+    "via": "192.168.1.104:41641",
+    "ms": 401.0,
+    "minMs": 372.0,
+    "maxMs": 625.0,
+    "n": 8
+   }
+  },
+  {
+   "id": "n13example0CNTRL",
+   "name": "srv-1",
+   "os": "linux",
+   "online": true,
+   "lastSeen": null,
+   "derp": "waw",
+   "ip": "100.64.0.22",
+   "parent": null,
+   "exitNode": false,
+   "path": {
+    "kind": "direct",
+    "via": "5.6.7.8:41641",
+    "ms": 336.0,
+    "minMs": 335.0,
+    "maxMs": 346.0,
+    "n": 8
+   }
+  },
+  {
+   "id": "n14example0CNTRL",
+   "name": "win-test",
+   "os": "windows",
+   "online": true,
+   "lastSeen": null,
+   "derp": "syd",
+   "ip": "100.64.0.23",
+   "parent": "pve",
+   "exitNode": false,
+   "path": {
+    "kind": "lan",
+    "via": "192.168.1.115:41641",
+    "ms": 4.0,
+    "minMs": 4.0,
+    "maxMs": 6.0,
+    "n": 8
+   }
+  }
+ ]
+}

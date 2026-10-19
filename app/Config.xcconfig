@@ -1,0 +1,8 @@
+// Shared build settings. Override them in Local.xcconfig (gitignored) next to this file.
+DEVELOPMENT_TEAM =
+BUNDLE_ID_PREFIX = com.example
+// Tailscale MagicDNS name of the Proxmox host (collector on :9443, web UI on :8006).
+PVE_HOST = pve.example.ts.net
+APP_GROUP_ID = $(DEVELOPMENT_TEAM).$(BUNDLE_ID_PREFIX).pvewidget
+
+#include? "Local.xcconfig"
